@@ -1,0 +1,153 @@
+import pygame
+import sys
+import random
+import math
+
+# Define constants
+WIDTH, HEIGHT = 800, 600
+GRAVITY = 0.1
+
+# Define Particle class
+class Particle:
+    COLORS = [
+        (255, 0, 0),  # Red
+        (255, 165, 0),  # Orange
+        (255, 255, 0),  # Yellow
+        (173, 216, 230),  # Light Blue
+        (0, 0, 255)  # Blue
+    ]
+
+    def __init__(self, size):
+        self.size = size
+        self.mass = size * 10  # Mass based on size
+        self.x = random.uniform(50, WIDTH - 50)
+        self.y = random.uniform(50, HEIGHT - 50)
+        self.velocity = [random.uniform(-1, 1), random.uniform(-1, 1)]
+        self.color_index = random.choice([0, 1])  # Start with red or orange
+        self.collisions = 0  # Count the number of collisions
+
+    def get_color(self):
+        return Particle.COLORS[self.color_index]
+
+    def apply_gravity(self, other):
+        dx = other.x - self.x
+        dy = other.y - self.y
+        distance = max(1, math.sqrt(dx**2 + dy**2))
+        force = GRAVITY * (self.mass * other.mass) / distance**2
+        angle = math.atan2(dy, dx)
+        self.velocity[0] += force * math.cos(angle) / self.mass
+        self.velocity[1] += force * math.sin(angle) / self.mass
+
+    def collide(self, other):
+        dx = other.x - self.x
+        dy = other.y - self.y
+        distance = math.sqrt(dx**2 + dy**2)
+        if distance < self.size + other.size:
+            # Perfectly elastic collision
+            angle = math.atan2(dy, dx)
+            new_velocity_self = [
+                self.velocity[0] - 2 * other.mass / (self.mass + other.mass) * math.cos(angle),
+                self.velocity[1] - 2 * other.mass / (self.mass + other.mass) * math.sin(angle)
+            ]
+            new_velocity_other = [
+                other.velocity[0] + 2 * self.mass / (self.mass + other.mass) * math.cos(angle),
+                other.velocity[1] + 2 * self.mass / (self.mass + other.mass) * math.sin(angle)
+            ]
+            self.velocity = new_velocity_self
+            other.velocity = new_velocity_other
+            # Change color based on the number of collisions
+            self.collisions += 1
+            self.color_index = min(self.color_index + 1, len(Particle.COLORS) - 1)
+            other.collisions += 1
+            other.color_index = min(other.color_index + 1, len(Particle.COLORS) - 1)
+
+    def update(self):
+        self.x += self.velocity[0]
+        self.y += self.velocity[1]
+        # Bounce off walls
+        if self.x - self.size <= 0 or self.x + self.size >= WIDTH:
+            self.velocity[0] *= -1
+        if self.y - self.size <= 0 or self.y + self.size >= HEIGHT:
+            self.velocity[1] *= -1
+
+# Initialize Pygame
+pygame.init()
+
+# Set up the screen
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Particle Simulation")
+
+# Create particles
+num_particles = 50  # Increase the number of particles
+particles = [Particle(random.uniform(0.1, 0.5)) for _ in range(num_particles)]
+
+# Console parameters
+console_font = pygame.font.Font(None, 36)
+rewind_button = pygame.Rect(50, HEIGHT, 100, 50)
+pause_button = pygame.Rect(200, HEIGHT, 100, 50)
+fast_forward_button = pygame.Rect(350, HEIGHT, 100, 50)
+fps = 60
+clock = pygame.time.Clock()
+paused = False
+rewind = False
+fast_forward = False
+
+# Main loop
+while True:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            pygame.quit()
+            sys.exit()
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            mouse_x, mouse_y = event.pos
+            if rewind_button.collidepoint(mouse_x, mouse_y):
+                rewind = True
+            elif pause_button.collidepoint(mouse_x, mouse_y):
+                paused = not paused
+            elif fast_forward_button.collidepoint(mouse_x, mouse_y):
+                fast_forward = True
+
+    if rewind:
+        particles = [Particle(random.uniform(0.1, 0.5)) for _ in range(num_particles)]
+        rewind = False
+
+    if not paused:
+        # Update particles
+        for particle in particles:
+            for other in particles:
+                if particle != other:
+                    particle.apply_gravity(other)  # Apply gravity from all particles
+                    particle.collide(other)  # Check and handle collisions
+            particle.update()
+
+    # Draw particles
+    screen.fill((255, 255, 255))
+    for particle in particles:
+        pygame.draw.circle(screen, particle.get_color(), (int(particle.x), int(particle.y)), int(particle.size * 15))
+
+    # Draw console
+    pygame.draw.rect(screen, (200, 200, 200), rewind_button)
+    pygame.draw.rect(screen, (200, 200, 200), pause_button)
+    pygame.draw.rect(screen, (200, 200, 200), fast_forward_button)
+
+    text_rewind = console_font.render("Rewind", True, (0, 0, 0))
+    text_pause = console_font.render("Pause", True, (0, 0, 0))
+    text_fast_forward = console_font.render("Fast Forward", True, (0, 0, 0))
+
+    screen.blit(text_rewind, (75, HEIGHT + 10))
+    screen.blit(text_pause, (230, HEIGHT + 10))
+    screen.blit(text_fast_forward, (365, HEIGHT + 10))
+
+    pygame.display.flip()
+    clock.tick(fps)
+
+    if fast_forward:
+        num_frames_to_skip = min(10, len(particles) - 1)
+        for _ in range(num_frames_to_skip):
+            for particle in particles:
+                for other in particles:
+                    if particle != other:
+                        particle.apply_gravity(other)  # Apply gravity from all particles
+                        particle.collide(other)  # Check and handle collisions
+                particle.update()
+        fast_forward = False
